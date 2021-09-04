@@ -19,6 +19,7 @@ jobs:
       - name: Checkout harmony core code
         uses: actions/checkout@v2
         with:
+          repository: harmony-one/harmony
           path: harmony
           ref: ${{ github.event.inputs.inputtag }}
           fetch-depth: 0
