@@ -35,3 +35,82 @@ jobs:
             echo "::set-output name=tag_annotated::false"
           fi
         working-directory: harmony
+      
+      - name: show tag annotated
+        run: |
+          echo "${{ steps.check-tag-annotated.outputs.tag_annotated }}"
+
+build:
+    name: Build harmony binary
+    needs: check
+    runs-on: ${{ matrix.os }}
+    if: needs.check.outputs.tag_annotated == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-18.04, macos-10.15]
+
+    steps:
+      - name: Set up Go 1.14
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.14.14
+
+      - name: Checkout dependence repo
+        uses: actions/checkout@v2
+        with:
+          repository: harmony-one/mcl
+          path: mcl
+
+      - name: Checkout dependence repo
+        uses: actions/checkout@v2
+        with:
+          repository: harmony-one/bls
+          path: bls
+
+      - name: Checkout harmony core code
+        uses: actions/checkout@v2
+        with:
+          repository: harmony-one/harmony
+          path: harmony
+          ref: ${{ github.event.inputs.inputtag }}
+          fetch-depth: 0
+
+      - name: Get latest version and release
+        run: |
+          VERSION=$(git tag -l --sort=-v:refname | head -n 1 | tr -d v)
+          RELEASE=$(git describe --long | cut -f2 -d-)
+          echo "build_version=$VERSION" >> $GITHUB_ENV
+          echo "build_release=$RELEASE" >> $GITHUB_ENV
+        working-directory: harmony
+
+      - name: Build harmony binary and packages for Linux
+        if: matrix.os == 'ubuntu-18.04'
+        run: |
+          make linux_static
+          make deb
+          echo %_signature gpg >> $HOME/.rpmmacros && echo "%_gpg_name Harmony (harmony.one)" >> $HOME/.rpmmacros
+          make rpm
+          mv ./bin/harmony ./bin/harmony-amd64
+          mv $HOME/debbuild/harmony-$build_version-$build_release.deb ./bin/
+          mv $HOME/rpmbuild/RPMS/x86_64/harmony-$build_version-$build_release.x86_64.rpm ./bin/
+        working-directory: harmony
+
+      - name: Build harmony binary and packages for MacOS
+        if: matrix.os == 'macos-10.15'
+        run: |
+          brew install bash
+          sudo rm -f /usr/local/opt/openssl
+          sudo ln -sf /usr/local/opt/openssl@1.1 /usr/local/opt/openssl
+          make
+          cd ./bin && mkdir ./lib && mv ./*.dylib ./lib && rm -f ./bootnode
+          gpg --detach-sign harmony
+          zip -qr ./harmony-macos.zip ./*
+          rm -rf `ls * | egrep -v harmony-macos.zip`
+        working-directory: harmony
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: harmony
+          path: harmony/bin/*
+          retention-days: 1
