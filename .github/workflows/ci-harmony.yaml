@@ -40,7 +40,7 @@ jobs:
         run: |
           echo "${{ steps.check-tag-annotated.outputs.tag_annotated }}"
 
-build:
+  build:
     name: Build harmony binary
     needs: check
     runs-on: ${{ matrix.os }}
